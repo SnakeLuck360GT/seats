@@ -1,110 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeATs Code</title>
-<style>
-body { font-family: Arial; display: flex; flex-direction: column; align-items: center; padding: 20px; background: #f0f0f0; }
-#qr-reader { width: 100%; max-width: 400px; margin-bottom: 10px; }
-#zoom-slider { width: 80%; margin-bottom: 20px; }
-#code-display { font-size: 1.5em; margin: 10px 0; word-break: break-word; text-align: center; }
-button { padding: 10px 20px; font-size: 1em; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; }
-button:hover { background-color: #0056b3; }
-#error { color: red; margin-top: 10px; }
-</style>
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>QR Scanner</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 1.4rem;
+      text-align: center;
+    }
+    #reader {
+      width: 100%;
+      margin-top: 20px;
+    }
+    #codeBox {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      word-break: break-all;
+      display: none;
+    }
+    #copyBtn {
+      margin-top: 15px;
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1rem;
+      border: none;
+      border-radius: 8px;
+      background: #007aff;
+      color: white;
+      display: none;
+    }
+    #errorMsg {
+      margin-top: 20px;
+      color: red;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+    }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode" defer></script>
 </head>
 <body>
+  <h1>QR Scanner</h1>
 
-<h1>SeATs Code</h1>
-<div id="qr-reader"></div>
-<input id="zoom-slider" type="range" style="display:none;">
-<div id="error"></div>
-<div id="code-display"></div>
-<button id="copy-btn" style="display:none;">Copy Code</button>
+  <div id="reader"></div>
+  <p id="errorMsg"></p>
+  <div id="codeBox"></div>
+  <button id="copyBtn">Copy Code</button>
 
-<script>
-let globalCode = null;
+  <script>
+    const VALID_PREFIX = "https://seatssoftware.com/qr/";
 
-function updateDisplay(code) {
-  globalCode = code;
-  document.getElementById('code-display').textContent = code;
-  document.getElementById('copy-btn').style.display = 'inline-block';
-  document.getElementById('error').textContent = '';
-}
-
-document.getElementById('copy-btn').addEventListener('click', () => {
-  if(globalCode){
-    navigator.clipboard.writeText(globalCode).then(() => alert('Code copied!'));
-  }
-});
-
-async function fetchGlobalCode() {
-  try {
-    const res = await fetch('/.netlify/functions/get-code');
-    const data = await res.json();
-    if(data.code) updateDisplay(data.code);
-  } catch(e) { console.log('Could not fetch global code'); }
-}
-
-async function sendGlobalCode(code) {
-  try {
-    await fetch('/.netlify/functions/set-code', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ code })
-    });
-  } catch(e) { console.log('Could not send code'); }
-}
-
-function onScanSuccess(decodedText) {
-  const errorDiv = document.getElementById('error');
-  const match = decodedText.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
-  if(match){
-    const code = match[1];
-    updateDisplay(code);
-    sendGlobalCode(code);
-  } else {
-    errorDiv.textContent = 'Invalid QR code format!';
-  }
-}
-
-let html5QrcodeScanner = new Html5Qrcode("qr-reader");
-
-html5QrcodeScanner.start(
-  { facingMode: "environment" },
-  {
-    fps: 10,
-    qrbox: 250,
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-    videoConstraints: {
-      facingMode: "environment",
-      advanced: [{ zoom: 1 }] 
+    function startScanner() {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, qr => {
+        handleScan(qr);
+      });
     }
-  },
-  onScanSuccess
-).then(() => {
-  const tracks = html5QrcodeScanner.getState().cameraStream.getVideoTracks();
-  const track = tracks[0];
-  const capabilities = track.getCapabilities();
-  const slider = document.getElementById("zoom-slider");
 
-  if (capabilities.zoom) {
-    slider.min = capabilities.zoom.min;
-    slider.max = capabilities.zoom.max;
-    slider.step = capabilities.zoom.step;
-    slider.value = track.getSettings().zoom || capabilities.zoom.min;
-    slider.style.display = "block";
+    function handleScan(text) {
+      const errorMsg = document.getElementById("errorMsg");
+      const codeBox = document.getElementById("codeBox");
+      const copyBtn = document.getElementById("copyBtn");
 
-    slider.oninput = () => {
-      track.applyConstraints({ advanced: [{ zoom: slider.value }] });
-    };
-  }
-});
+      if (!text.startsWith(VALID_PREFIX)) {
+        errorMsg.style.display = "block";
+        errorMsg.textContent = "Invalid QR format!";
+        codeBox.style.display = "none";
+        copyBtn.style.display = "none";
+        return;
+      }
 
-fetchGlobalCode();
-</script>
+      const code = text.replace(VALID_PREFIX, "");
 
+      errorMsg.style.display = "none";
+      codeBox.style.display = "block";
+      copyBtn.style.display = "block";
+
+      codeBox.textContent = code;
+
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(code);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => (copyBtn.textContent = "Copy Code"), 1500);
+      };
+    }
+
+    window.onload = startScanner;
+  </script>
 </body>
 </html>
