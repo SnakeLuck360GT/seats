@@ -69,7 +69,43 @@ function onScanSuccess(decodedText) {
 }
 
 let html5QrcodeScanner = new Html5Qrcode("qr-reader");
-html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
+html5QrcodeScanner.start(
+  { facingMode: "environment" },
+  {
+    fps: 10,
+    qrbox: 250,
+    experimentalFeatures: {
+      useBarCodeDetectorIfSupported: true
+    },
+    videoConstraints: {
+      facingMode: "environment",
+      advanced: [{ zoom: 2 }] // default zoom level (1 = no zoom)
+    }
+  },
+  onScanSuccess
+).then(() => {
+  // Add zoom slider if camera supports zoom
+  const tracks = html5QrcodeScanner.getState().cameraStream.getVideoTracks();
+  const track = tracks[0];
+  const capabilities = track.getCapabilities();
+
+  if (capabilities.zoom) {
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = capabilities.zoom.min;
+    input.max = capabilities.zoom.max;
+    input.step = capabilities.zoom.step;
+    input.value = track.getSettings().zoom || capabilities.zoom.min;
+    input.style.width = "80%";
+    input.style.marginTop = "15px";
+
+    input.oninput = () => {
+      track.applyConstraints({ advanced: [{ zoom: input.value }] });
+    };
+
+    document.body.appendChild(input);
+  }
+});
 
 fetchGlobalCode();
 </script>
