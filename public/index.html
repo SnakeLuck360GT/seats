@@ -26,10 +26,11 @@
         max-width: 400px;
         overflow: hidden;
         position: relative;
+        background: black;
     }
 
-    /* Video wrapper that allows scaling */
-    #camera-wrapper video {
+    /* Manual digital zoom via CSS */
+    #qr-reader video {
         transform-origin: center center;
     }
 
@@ -60,7 +61,7 @@
 
 <h2>SeATs Code Scanner</h2>
 
-<!-- ZOOM SLIDER AT TOP -->
+<!-- ZOOM SLIDER -->
 <div id="zoom-container">
     <label>Zoom</label><br>
     <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" style="width: 100%;">
@@ -75,20 +76,17 @@
 let globalCode = null;
 let currentScale = 1;
 
-// Apply digital zoom by scaling the video element
+// Digital zoom (CSS transform)
 function applyZoom(scale) {
     const video = document.querySelector("#qr-reader video");
-    if (video) {
-        video.style.transform = `scale(${scale})`;
-    }
+    if (video) video.style.transform = `scale(${scale})`;
 }
 
-document.getElementById("zoom-slider").addEventListener("input", function() {
+document.getElementById("zoom-slider").addEventListener("input", function () {
     currentScale = parseFloat(this.value);
     applyZoom(currentScale);
 });
 
-// Update display
 function updateDisplay(code) {
     globalCode = code;
     document.getElementById("code-display").textContent = code;
@@ -97,38 +95,36 @@ function updateDisplay(code) {
 }
 
 document.getElementById("copy-btn").addEventListener("click", () => {
-    if (globalCode) {
-        navigator.clipboard.writeText(globalCode).then(() => alert("Code copied!"));
-    }
+    if (globalCode) navigator.clipboard.writeText(globalCode).then(() => alert("Code copied!"));
 });
 
 function onScanSuccess(decodedText) {
-    const errorDiv = document.getElementById('error');
     const match = decodedText.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
 
     if (match) {
-        const code = match[1];
-        updateDisplay(code);
+        updateDisplay(match[1]);
     } else {
-        errorDiv.textContent = "Invalid QR code format!";
+        document.getElementById("error").textContent = "Invalid QR code format!";
     }
 }
 
-// Init scanner
+// START CAMERA — MUST BE SAFARI SAFE
 const html5Scanner = new Html5Qrcode("qr-reader");
+
 html5Scanner.start(
-  {
-    facingMode: "environment",
-    width: { ideal: 1920 }, // Safari-safe high res
-    height: { ideal: 1080 }
-  },
-  {
-    fps: 10,
-    qrbox: 250
-  },
-  onScanSuccess
+    {
+        facingMode: "environment" // safest for Safari
+    },
+    {
+        fps: 10,
+        qrbox: 250
+    },
+    onScanSuccess
 ).then(() => {
-  setTimeout(() => applyZoom(currentScale), 500);
+    // Apply zoom after video loads
+    setTimeout(() => applyZoom(currentScale), 500);
+}).catch(err => {
+    document.getElementById("error").textContent = "Camera failed to start: " + err;
 });
 </script>
 
