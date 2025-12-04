@@ -118,17 +118,9 @@ function onScanSuccess(decodedText) {
 const html5Scanner = new Html5Qrcode("qr-reader");
 html5Scanner.start(
   {
-    video: {
-      facingMode: { exact: "environment" },
-      width: { ideal: 4096 },   // Force high resolution
-      height: { ideal: 2160 },
-      advanced: [
-        { width: 4096 },
-        { height: 2160 },
-        { focusMode: "continuous" }, 
-        { torch: false }
-      ]
-    }
+    facingMode: "environment",
+    width: { ideal: 1920 }, // Safari-safe high res
+    height: { ideal: 1080 }
   },
   {
     fps: 10,
