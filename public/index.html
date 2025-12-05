@@ -3,113 +3,90 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>High-Resolution QR Scanner</title>
+<title>SuperScan QR (Long Distance)</title>
 
 <style>
     body {
         font-family: Arial;
         text-align: center;
-        padding: 20px;
         background: #f0f0f0;
+        padding: 20px;
     }
     #preview {
-        width: 90%;
-        max-width: 400px;
-        margin-top: 20px;
-        border-radius: 10px;
+        width: 95%;
+        max-width: 450px;
+        border-radius: 12px;
+        margin-top: 15px;
         display: none;
     }
     #code {
         font-size: 1.4em;
-        margin-top: 15px;
+        margin-top: 20px;
         word-break: break-word;
     }
     #error {
         color: red;
         margin-top: 10px;
     }
-    button, input[type=file] {
-        padding: 12px 20px;
+    input[type=file] {
+        padding: 12px;
+        border-radius: 10px;
         font-size: 1.1em;
-        border: none;
-        border-radius: 8px;
         background: #007bff;
         color: white;
+        border: none;
         cursor: pointer;
-        margin-top: 15px;
-    }
-    input[type=file] {
-        background: #28a745;
     }
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!-- ZXING (big improvement over jsQR) -->
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+
 </head>
 <body>
 
-<h2>High-Res QR Scanner</h2>
+<h1>SuperScan QR (Long Distance)</h1>
 
-<!-- CAMERA BUTTON -->
 <input id="cameraInput" type="file" accept="image/*" capture="environment">
 
-<!-- SHOW PHOTO TAKEN -->
 <img id="preview">
 
-<!-- RESULTS -->
 <div id="code"></div>
 <div id="error"></div>
 
 <script>
 const input = document.getElementById("cameraInput");
 const preview = document.getElementById("preview");
-const codeBox = document.getElementById("code");
-const errorBox = document.getElementById("error");
+const codeOut = document.getElementById("code");
+const errorOut = document.getElementById("error");
 
-input.addEventListener("change", async function () {
-    const file = this.files[0];
+const reader = new ZXing.BrowserQRCodeReader();
+
+input.addEventListener("change", async () => {
+    const file = input.files[0];
     if (!file) return;
 
-    errorBox.textContent = "";
-    codeBox.textContent = "";
+    errorOut.textContent = "";
+    codeOut.textContent = "";
 
-    // Display photo preview
     preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
 
-    // Decode after image loads
-    preview.onload = () => processImage(preview);
-});
+    preview.onload = async () => {
+        try {
+            const result = await reader.decodeFromImage(preview);
+            const text = result.text;
 
-function processImage(img) {
-    // Create a canvas matching the full-resolution photo
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
+            const match = text.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
 
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+            if (match) codeOut.textContent = match[1];
+            else errorOut.textContent = "Invalid QR format!";
 
-    // Draw image into canvas
-    context.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    // Extract pixel data
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Decode QR
-    const qr = jsQR(imageData.data, canvas.width, canvas.height);
-
-    if (qr) {
-        const text = qr.data;
-        const match = text.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
-
-        if (match) {
-            codeBox.textContent = match[1];
-        } else {
-            errorBox.textContent = "Invalid QR format!";
+        } catch (e) {
+            errorOut.textContent = "QR not found. Try closer / zoom / better lighting.";
         }
-    } else {
-        errorBox.textContent = "No QR code found in the photo.";
-    }
-}
+    };
+});
 </script>
 
 </body>
