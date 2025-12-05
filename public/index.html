@@ -3,61 +3,73 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>SeATs Code Scanner – Ultra Quality</title>
+<title>SeATs Code Scanner</title>
 
 <style>
-body {
-    font-family: Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 10px;
-    background: #f0f0f0;
-}
-#controls {
-    width: 90%;
-    margin-bottom: 10px;
-    text-align: center;
-}
-#qr-reader {
-    width: 100%;
-    max-width: 400px;
-    background: black;
-    overflow: hidden;
-    position: relative;
-}
-#qr-reader video {
-    transform-origin: center center;
-}
-#code-display {
-    font-size: 1.5em;
-    margin: 10px 0;
-    word-break: break-word;
-    text-align: center;
-}
-button {
-    padding: 10px 20px;
-    font-size: 1em;
-    border: none;
-    border-radius: 5px;
-    margin-top: 5px;
-    cursor: pointer;
-}
-#copy-btn { background: #007bff; color: white; }
-#torch-btn { background: #ffaa00; color: black; }
-#error { color: red; margin-top: 10px; text-align:center; }
+    body {
+        font-family: Arial;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        background: #f0f0f0;
+    }
+
+    #zoom-container {
+        width: 90%;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+
+    #qr-reader {
+        width: 100%;
+        max-width: 420px; /* slightly bigger for better sampling */
+        overflow: hidden;
+        position: relative;
+        background: black;
+        border-radius: 8px;
+    }
+
+    /* Digital zoom target */
+    #qr-reader video {
+        transform-origin: center center;
+    }
+
+    #code-display {
+        font-size: 1.5em;
+        margin: 10px 0;
+        word-break: break-word;
+        text-align: center;
+    }
+
+    button {
+        padding: 10px 20px;
+        font-size: 1em;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+
+    #error {
+        color: red;
+        margin-top: 10px;
+        text-align: center;
+    }
 </style>
 
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
-<h2>SeATs Code Scanner – iPhone 17 Optimized</h2>
+<h2>SeATs Code Scanner</h2>
 
-<div id="controls">
+<!-- ZOOM SLIDER AT TOP -->
+<div id="zoom-container">
     <label>Zoom</label><br>
-    <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" style="width:100%;"><br>
-    <button id="torch-btn">Toggle Torch</button>
+    <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" style="width: 100%;">
 </div>
 
 <div id="qr-reader"></div>
@@ -68,65 +80,64 @@ button {
 <script>
 let globalCode = null;
 let currentScale = 1;
-let torchOn = false;
-let track = null;
 
+// Apply digital zoom via CSS transform
 function applyZoom(scale) {
     const video = document.querySelector("#qr-reader video");
-    if (video) video.style.transform = `scale(${scale})`;
+    if (video) {
+        video.style.transform = `scale(${scale})`;
+    }
 }
 
-document.getElementById("zoom-slider").addEventListener("input", function() {
+document.getElementById("zoom-slider").addEventListener("input", function () {
     currentScale = parseFloat(this.value);
     applyZoom(currentScale);
 });
 
-document.getElementById("copy-btn").addEventListener("click", () => {
-    if(globalCode) navigator.clipboard.writeText(globalCode).then(()=>alert("Code copied!"));
-});
-
-document.getElementById("torch-btn").addEventListener("click", () => {
-    if(track && track.getCapabilities().torch){
-        torchOn = !torchOn;
-        track.applyConstraints({ advanced:[{torch: torchOn}] });
-    }
-});
-
-function updateDisplay(code){
+// Update display with code
+function updateDisplay(code) {
     globalCode = code;
     document.getElementById("code-display").textContent = code;
     document.getElementById("copy-btn").style.display = "inline-block";
     document.getElementById("error").textContent = "";
 }
 
-function onScanSuccess(decodedText){
+document.getElementById("copy-btn").addEventListener("click", () => {
+    if (globalCode) {
+        navigator.clipboard.writeText(globalCode).then(() => alert("Code copied!"));
+    }
+});
+
+// QR scan callback
+function onScanSuccess(decodedText) {
     const match = decodedText.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
-    if(match) updateDisplay(match[1]);
-    else document.getElementById("error").textContent = "Invalid QR code format!";
+    if (match) {
+        updateDisplay(match[1]);
+    } else {
+        document.getElementById("error").textContent = "Invalid QR code format!";
+    }
 }
 
+// Init scanner (SAFE, SIMPLE, WORKS ON SAFARI)
 const html5Scanner = new Html5Qrcode("qr-reader");
 
-// iPhone 17 optimized: use main rear camera, request max resolution Safari allows
-const constraints = {
-    facingMode: { exact: "environment" },
-    width: { ideal: 3840 },
-    height: { ideal: 2160 }
-};
-
 html5Scanner.start(
-    constraints,
-    { fps:10, qrbox:250 },
-    onScanSuccess
+    { facingMode: "environment" },  // Let browser pick best rear camera
+    {
+        fps: 15,                    // a bit smoother than 10
+        qrbox: 300,                 // slightly larger scan area for better effective resolution
+        disableFlip: true           // no mirror flipping
+    },
+    onScanSuccess,
+    // optional error callback per frame (we can ignore or log)
+    (errMsg) => {
+        // console.log("scan error", errMsg);
+    }
 ).then(() => {
-    // grab the video track for torch and autofocus
-    const stream = document.querySelector("#qr-reader video").srcObject;
-    if(stream) track = stream.getVideoTracks()[0];
-
-    // apply initial digital zoom
-    setTimeout(()=>applyZoom(currentScale), 500);
-}).catch(err=>{
-    document.getElementById("error").textContent = "Camera failed: "+err;
+    // apply initial zoom once video is there
+    setTimeout(() => applyZoom(currentScale), 500);
+}).catch(err => {
+    document.getElementById("error").textContent = "Camera failed to start: " + err;
 });
 </script>
 
