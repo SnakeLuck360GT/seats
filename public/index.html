@@ -2,135 +2,142 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>SeATs QR Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hybrid QR Scanner</title>
 
 <style>
     body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background: #f0f0f0;
+        font-family: Arial;
         padding: 20px;
+        text-align: center;
+        background: #f0f0f0;
     }
-
-    /* BIGGER CAMERA PREVIEW = HIGHER EFFECTIVE SCAN DISTANCE */
     #qr-reader {
         width: 95%;
-        max-width: 900px; /* IMPORTANT: THIS IS WHAT FIXES YOUR DISTANCE ISSUE */
+        max-width: 480px;
+        margin: auto;
         background: black;
         border-radius: 10px;
         overflow: hidden;
-        position: relative;
     }
-
     #qr-reader video {
         transform-origin: center;
     }
-
-    #zoom-container {
-        width: 90%;
-        margin-bottom: 15px;
-        text-align: center;
-    }
-
-    #code-display {
-        margin-top: 20px;
-        font-size: 1.4rem;
-        word-break: break-word;
-        text-align: center;
-    }
-
-    #error {
-        color: red;
-        margin-top: 10px;
-        text-align: center;
-    }
-
-    button {
+    #fallbackBtn {
+        margin-top: 15px;
         padding: 12px 20px;
-        background: #007bff;
-        color: white;
         border: none;
         border-radius: 8px;
+        font-size: 1.1em;
+        background: #ff9900;
+        color: white;
         cursor: pointer;
-        font-size: 1rem;
+    }
+    #fileInput {
+        display: none;
+    }
+    #preview {
+        display: none;
+        width: 95%;
+        max-width: 480px;
+        border-radius: 10px;
+        margin-top: 15px;
+    }
+    #result {
+        margin-top: 20px;
+        font-size: 1.4em;
+        word-break: break-word;
+    }
+    #error {
+        color: red;
         margin-top: 10px;
     }
 </style>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+
 </head>
 <body>
 
-<h2>SeATs Code Scanner</h2>
+<h2>Hybrid QR Scanner</h2>
 
-<div id="zoom-container">
-    <label>Zoom</label><br>
-    <input id="zoom-slider" type="range" min="1" max="3" step="0.05" value="1" style="width:100%;">
-</div>
-
+<!-- LIVE SCANNER -->
 <div id="qr-reader"></div>
 
-<div id="code-display"></div>
+<!-- BUTTON TO CAPTURE A HIGH-RES PHOTO -->
+<button id="fallbackBtn">Scan From Far Away (Hi-Res Mode)</button>
+<input type="file" accept="image/*" capture="environment" id="fileInput">
+
+<!-- Hi-res photo preview (optional) -->
+<img id="preview">
+
+<div id="result"></div>
 <div id="error"></div>
 
-<button id="copy-btn" style="display:none;">Copy Code</button>
-
 <script>
-let currentScale = 1;
-let globalCode = null;
+const fallbackBtn = document.getElementById("fallbackBtn");
+const fileInput = document.getElementById("fileInput");
+const preview = document.getElementById("preview");
+const resultBox = document.getElementById("result");
+const errorBox = document.getElementById("error");
 
-// Apply digital zoom
-function applyZoom(scale) {
-    const video = document.querySelector("#qr-reader video");
-    if (video) video.style.transform = `scale(${scale})`;
+function showError(msg) {
+    errorBox.textContent = msg;
 }
 
-document.getElementById("zoom-slider").addEventListener("input", function() {
-    currentScale = parseFloat(this.value);
-    applyZoom(currentScale);
-});
-
-function updateDisplay(code) {
-    globalCode = code;
-    document.getElementById("code-display").textContent = code;
-    document.getElementById("copy-btn").style.display = "inline-block";
-    document.getElementById("error").textContent = "";
+function showResult(code) {
+    resultBox.textContent = code;
+    errorBox.textContent = "";
 }
 
-document.getElementById("copy-btn").addEventListener("click", () => {
-    if (globalCode) navigator.clipboard.writeText(globalCode);
-});
+// ----------------------
+// 1️⃣ LIVE SCANNER SETUP
+// ----------------------
+function liveScan() {
+    const qrScanner = new Html5Qrcode("qr-reader");
 
-function onScanSuccess(text) {
-    const match = text.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
-    if (match) {
-        updateDisplay(match[1]);
-    } else {
-        document.getElementById("error").textContent = "Invalid QR code format!";
-    }
+    qrScanner.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: 250 },
+        (decoded) => {
+            const match = decoded.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
+            if (match) showResult(match[1]);
+        },
+        () => {}
+    ).catch(err => showError("Camera error: " + err));
 }
 
-const html5Scanner = new Html5Qrcode("qr-reader");
+liveScan();
 
-// THE BEST SETTINGS FOR SAFARI
-const config = {
-    fps: 15,
-    qrbox: 220,        // HIGHER PIXEL DENSITY = LONGER RANGE
-    disableFlip: true
+// ----------------------------------------------------
+// 2️⃣ HI-RES FALLBACK: TAKE PHOTO → ZXING DECODE
+// ----------------------------------------------------
+fallbackBtn.onclick = () => fileInput.click();
+
+fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    preview.onload = () => decodeHighRes(preview);
 };
 
-html5Scanner.start(
-    { facingMode: "environment" },
-    config,
-    onScanSuccess
-).then(() => {
-    setTimeout(() => applyZoom(currentScale), 500);
-}).catch(err => {
-    document.getElementById("error").textContent = "Camera error: " + err;
-});
+async function decodeHighRes(img) {
+    try {
+        const code = await ZXing.BrowserQRCodeReader.decodeFromImage(img);
+        const text = code.text;
+
+        const match = text.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
+
+        if (match) showResult(match[1]);
+        else showError("Invalid QR format");
+    } catch (e) {
+        showError("Couldn't read QR. Try closer / tap to focus / more light.");
+    }
+}
 </script>
 
 </body>
