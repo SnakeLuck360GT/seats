@@ -2,143 +2,114 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>SeATs Code Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>High-Resolution QR Scanner</title>
 
 <style>
     body {
         font-family: Arial;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 10px;
+        text-align: center;
+        padding: 20px;
         background: #f0f0f0;
     }
-
-    #zoom-container {
+    #preview {
         width: 90%;
-        margin-bottom: 15px;
-        text-align: center;
+        max-width: 400px;
+        margin-top: 20px;
+        border-radius: 10px;
+        display: none;
     }
-
-    #qr-reader {
-        width: 100%;
-        max-width: 420px; /* slightly bigger for better sampling */
-        overflow: hidden;
-        position: relative;
-        background: black;
-        border-radius: 8px;
-    }
-
-    /* Digital zoom target */
-    #qr-reader video {
-        transform-origin: center center;
-    }
-
-    #code-display {
-        font-size: 1.5em;
-        margin: 10px 0;
+    #code {
+        font-size: 1.4em;
+        margin-top: 15px;
         word-break: break-word;
-        text-align: center;
     }
-
-    button {
-        padding: 10px 20px;
-        font-size: 1em;
-        border: none;
-        background-color: #007bff;
-        color: white;
-        border-radius: 5px;
-        cursor: pointer;
-        margin-top: 10px;
-    }
-
     #error {
         color: red;
         margin-top: 10px;
-        text-align: center;
+    }
+    button, input[type=file] {
+        padding: 12px 20px;
+        font-size: 1.1em;
+        border: none;
+        border-radius: 8px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+        margin-top: 15px;
+    }
+    input[type=file] {
+        background: #28a745;
     }
 </style>
 
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
 
-<h2>SeATs Code Scanner</h2>
+<h2>High-Res QR Scanner</h2>
 
-<!-- ZOOM SLIDER AT TOP -->
-<div id="zoom-container">
-    <label>Zoom</label><br>
-    <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" style="width: 100%;">
-</div>
+<!-- CAMERA BUTTON -->
+<input id="cameraInput" type="file" accept="image/*" capture="environment">
 
-<div id="qr-reader"></div>
+<!-- SHOW PHOTO TAKEN -->
+<img id="preview">
+
+<!-- RESULTS -->
+<div id="code"></div>
 <div id="error"></div>
-<div id="code-display"></div>
-<button id="copy-btn" style="display:none;">Copy Code</button>
 
 <script>
-let globalCode = null;
-let currentScale = 1;
+const input = document.getElementById("cameraInput");
+const preview = document.getElementById("preview");
+const codeBox = document.getElementById("code");
+const errorBox = document.getElementById("error");
 
-// Apply digital zoom via CSS transform
-function applyZoom(scale) {
-    const video = document.querySelector("#qr-reader video");
-    if (video) {
-        video.style.transform = `scale(${scale})`;
-    }
-}
+input.addEventListener("change", async function () {
+    const file = this.files[0];
+    if (!file) return;
 
-document.getElementById("zoom-slider").addEventListener("input", function () {
-    currentScale = parseFloat(this.value);
-    applyZoom(currentScale);
+    errorBox.textContent = "";
+    codeBox.textContent = "";
+
+    // Display photo preview
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    // Decode after image loads
+    preview.onload = () => processImage(preview);
 });
 
-// Update display with code
-function updateDisplay(code) {
-    globalCode = code;
-    document.getElementById("code-display").textContent = code;
-    document.getElementById("copy-btn").style.display = "inline-block";
-    document.getElementById("error").textContent = "";
-}
+function processImage(img) {
+    // Create a canvas matching the full-resolution photo
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
 
-document.getElementById("copy-btn").addEventListener("click", () => {
-    if (globalCode) {
-        navigator.clipboard.writeText(globalCode).then(() => alert("Code copied!"));
-    }
-});
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
 
-// QR scan callback
-function onScanSuccess(decodedText) {
-    const match = decodedText.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
-    if (match) {
-        updateDisplay(match[1]);
+    // Draw image into canvas
+    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Extract pixel data
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Decode QR
+    const qr = jsQR(imageData.data, canvas.width, canvas.height);
+
+    if (qr) {
+        const text = qr.data;
+        const match = text.match(/^https:\/\/seatssoftware\.com\/qr\/(.+)$/);
+
+        if (match) {
+            codeBox.textContent = match[1];
+        } else {
+            errorBox.textContent = "Invalid QR format!";
+        }
     } else {
-        document.getElementById("error").textContent = "Invalid QR code format!";
+        errorBox.textContent = "No QR code found in the photo.";
     }
 }
-
-// Init scanner (SAFE, SIMPLE, WORKS ON SAFARI)
-const html5Scanner = new Html5Qrcode("qr-reader");
-
-html5Scanner.start(
-    { facingMode: "environment" },  // Let browser pick best rear camera
-    {
-        fps: 15,                    // a bit smoother than 10
-        qrbox: 300,                 // slightly larger scan area for better effective resolution
-        disableFlip: true           // no mirror flipping
-    },
-    onScanSuccess,
-    // optional error callback per frame (we can ignore or log)
-    (errMsg) => {
-        // console.log("scan error", errMsg);
-    }
-).then(() => {
-    // apply initial zoom once video is there
-    setTimeout(() => applyZoom(currentScale), 500);
-}).catch(err => {
-    document.getElementById("error").textContent = "Camera failed to start: " + err;
-});
 </script>
 
 </body>
